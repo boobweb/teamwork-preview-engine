@@ -26,6 +26,14 @@ from .rubric import (
     create_default_rubric,
     evaluate_audit,
 )
+from .templates import (
+    TemplateValidationError,
+    get_templates_dir,
+    list_templates,
+    load_template,
+    render_template,
+    validate_template,
+)
 
 __version__ = "0.1.0"
 
@@ -48,5 +56,12 @@ __all__ = [
     "GuardrailReport",
     "estimate_tokens",
     "check_guardrail",
+    "TemplateValidationError",
+    "get_templates_dir",
+    "list_templates",
+    "load_template",
+    "render_template",
+    "validate_template",
     "__version__",
 ]
+

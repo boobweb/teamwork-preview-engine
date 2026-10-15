@@ -26,6 +26,13 @@ from .preflight import (
     get_fallback_recommendations,
 )
 from .rubric import create_default_rubric, evaluate_audit
+from .templates import (
+    list_templates,
+    load_template,
+    render_template,
+    validate_template,
+)
+
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -181,7 +188,59 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format (default: text)",
     )
 
+    # Subcommand: template
+    template_parser = subparsers.add_parser(
+        "template",
+        help="Inspect, validate, and render agent-specific mega-prompt templates",
+    )
+    template_parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List all available templates",
+    )
+    template_parser.add_argument(
+        "--show",
+        "-s",
+        type=str,
+        default=None,
+        help="Display the raw content of a specific template by name or path",
+    )
+    template_parser.add_argument(
+        "--validate",
+        type=str,
+        default=None,
+        help="Validate a template content or file path for forbidden placeholder tokens",
+    )
+    template_parser.add_argument(
+        "--render",
+        "-r",
+        type=str,
+        default=None,
+        help="Render a template by name with variable substitutions",
+    )
+    template_parser.add_argument(
+        "--var",
+        "-v",
+        action="append",
+        default=[],
+        help="Variable substitution in KEY=VAL format (can be specified multiple times)",
+    )
+    template_parser.add_argument(
+        "--output",
+        "-o",
+        type=str,
+        default=None,
+        help="Optional file path to write rendered or shown output",
+    )
+    template_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format for list or validation (default: text)",
+    )
+
     return parser
+
 
 
 def handle_clarify(args: argparse.Namespace) -> int:
@@ -375,10 +434,107 @@ def handle_guardrail(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_template(args: argparse.Namespace) -> int:
+    """Handle template subcommand."""
+    # 1. If --list:
+    if args.list:
+        templates = list_templates()
+        if args.format == "json":
+            print(json.dumps({"templates": templates}, indent=2))
+        else:
+            print("Available Mega-Prompt Templates:")
+            for t in templates:
+                print(f"  - {t}")
+        return 0
+
+    # 2. If --show:
+    if args.show:
+        try:
+            content = load_template(args.show)
+        except FileNotFoundError as fnf:
+            sys.stderr.write(f"Error: {fnf}\n")
+            return 2
+        if args.output:
+            Path(args.output).write_text(content, encoding="utf-8")
+        else:
+            print(content)
+        return 0
+
+    # 3. If --validate:
+    if args.validate:
+        target = args.validate
+        try:
+            if Path(target).is_file():
+                is_valid, errors = validate_template(target)
+            else:
+                try:
+                    content = load_template(target)
+                    is_valid, errors = validate_template(content)
+                except FileNotFoundError:
+                    is_valid, errors = validate_template(target)
+        except Exception as e:
+            sys.stderr.write(f"Error during validation: {e}\n")
+            return 2
+
+        if args.format == "json":
+            data = {
+                "target": target,
+                "valid": is_valid,
+                "errors": errors,
+            }
+            print(json.dumps(data, indent=2))
+        else:
+            if is_valid:
+                print(f"PASS: Template '{target}' contains ZERO placeholders.")
+            else:
+                print(f"FAIL: Template '{target}' failed validation with {len(errors)} error(s):")
+                for err in errors:
+                    print(f"  - {err}")
+
+        return 0 if is_valid else 1
+
+    # 4. If --render:
+    if args.render:
+        variables: dict[str, str] = {}
+        for var_entry in args.var or []:
+            if "=" not in var_entry:
+                sys.stderr.write(f"Error: Invalid variable format '{var_entry}'. Expected KEY=VAL\n")
+                return 2
+            k, v = var_entry.split("=", 1)
+            variables[k.strip()] = v.strip()
+
+        try:
+            rendered = render_template(args.render, variables=variables)
+        except FileNotFoundError as fnf:
+            sys.stderr.write(f"Error: {fnf}\n")
+            return 2
+
+        if args.output:
+            Path(args.output).write_text(rendered, encoding="utf-8")
+        else:
+            print(rendered)
+        return 0
+
+    sys.stderr.write("Error: Must specify one of --list, --show, --validate, or --render\n")
+    return 2
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """CLI main entry point."""
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     parser = build_parser()
     args = parser.parse_args(argv)
+
 
     if not args.subcommand:
         parser.print_help()
@@ -392,6 +548,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return handle_rubric(args)
     elif args.subcommand == "guardrail":
         return handle_guardrail(args)
+    elif args.subcommand == "template":
+        return handle_template(args)
 
     parser.print_help()
     return 0
@@ -399,3 +557,4 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
