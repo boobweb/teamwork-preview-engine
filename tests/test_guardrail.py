@@ -76,6 +76,25 @@ class TestGuardrail(unittest.TestCase):
         report = check_guardrail(text, max_tokens=500)
         self.assertTrue(any("lease or lock" in w.lower() for w in report.warnings))
 
+    def test_guardrail_pipeline_process_termination(self):
+        pipeline_commands = [
+            "Get-Process chrome | Stop-Process",
+            "gps discord | Stop-Process -Force",
+            "Get-Process -Name agy | Stop-Process",
+            "killall chrome",
+            "killall -9 discord",
+        ]
+        for cmd in pipeline_commands:
+            report = check_guardrail(cmd, max_tokens=500)
+            self.assertEqual(report.verdict, GuardrailVerdict.FAIL, f"Failed to detect: {cmd}")
+            self.assertTrue(len(report.protected_process_violations) >= 1)
+
+    def test_guardrail_benign_prose_containing_code(self):
+        prose = "We will kill the temporary subprocess, run the script, and verify the return code."
+        report = check_guardrail(prose, max_tokens=500)
+        self.assertEqual(report.verdict, GuardrailVerdict.PASS)
+        self.assertEqual(len(report.protected_process_violations), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

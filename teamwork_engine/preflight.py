@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -110,7 +110,7 @@ def parse_retry_timestamp(text: str) -> Optional[datetime]:
         retry_time = datetime(year, month, day, hour, minute)
         # If no date was provided and time is in past, advance to tomorrow
         if not match.group("day") and retry_time < now:
-            retry_time = retry_time.replace(day=now.day + 1)
+            retry_time = retry_time + timedelta(days=1)
         return retry_time
     except Exception:
         return None

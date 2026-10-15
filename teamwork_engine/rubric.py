@@ -6,6 +6,7 @@ mathematical validation, grading (A+ through F), and audit table rendering.
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -40,6 +41,11 @@ class Rubric:
             raise ValueError(
                 f"Rubric category weights must sum to exactly {self.total_points} (got {actual_sum})"
             )
+        for c in self.categories:
+            if c.max_points <= 0:
+                raise ValueError(
+                    f"Rubric category '{c.id}' max_points must be strictly positive (got {c.max_points})"
+                )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert rubric to dictionary."""
@@ -169,7 +175,7 @@ def create_default_rubric(
     - resources: 15
     - verification: 20
     """
-    w = weights or {
+    default_weights: Dict[str, int] = {
         "fidelity": 25,
         "feasibility": 20,
         "safety": 20,
@@ -177,18 +183,41 @@ def create_default_rubric(
         "verification": 20,
     }
 
-    # Verify input sum
-    actual_sum = sum(w.values())
-    if actual_sum != 100:
-        raise ValueError(
-            f"Rubric category weights must sum to exactly 100 (got {actual_sum})"
-        )
+    if weights is not None:
+        unknown_keys = set(weights.keys()) - set(default_weights.keys())
+        if unknown_keys:
+            raise ValueError(
+                f"Unknown category keys in weights: {sorted(unknown_keys)}. "
+                f"Allowed categories are: {sorted(default_weights.keys())}"
+            )
+
+        actual_sum = sum(weights.values())
+        if actual_sum != 100:
+            raise ValueError(
+                f"Rubric category weights must sum to exactly 100 (got {actual_sum})"
+            )
+
+        missing_keys = set(default_weights.keys()) - set(weights.keys())
+        if missing_keys:
+            raise ValueError(
+                f"Missing category keys in weights: {sorted(missing_keys)}. "
+                f"All 5 categories must be specified: {sorted(default_weights.keys())}"
+            )
+
+        for k, v in weights.items():
+            if not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
+                raise ValueError(
+                    f"Category weight for '{k}' must be strictly positive (got {v})"
+                )
+        w = weights
+    else:
+        w = dict(default_weights)
 
     categories = [
         RubricCategory(
             id="fidelity",
             name="1. Fidelity to Intent & Scope",
-            max_points=w.get("fidelity", 25),
+            max_points=w["fidelity"],
             description="Complete alignment with user core requirements, numbers, and zero dropped constraints.",
             evaluation_criteria=[
                 "Explicit goal and requested deliverables preserved without omission",
@@ -200,7 +229,7 @@ def create_default_rubric(
         RubricCategory(
             id="feasibility",
             name="2. Hardware & Architectural Feasibility",
-            max_points=w.get("feasibility", 20),
+            max_points=w["feasibility"],
             description="Compatibility with host platform, GPUs, libraries, file formats, and network ports.",
             evaluation_criteria=[
                 "Proper shell and runtime conventions (Windows pwsh / POSIX bash)",
@@ -212,7 +241,7 @@ def create_default_rubric(
         RubricCategory(
             id="safety",
             name="3. Safety, Isolation & Non-Destruction",
-            max_points=w.get("safety", 20),
+            max_points=w["safety"],
             description="Respect for untouchable processes, non-destructive file handling, and isolation.",
             evaluation_criteria=[
                 "Protected user processes never terminated without explicit confirmation",
@@ -224,7 +253,7 @@ def create_default_rubric(
         RubricCategory(
             id="resources",
             name="4. Resource Management & Memory Recovery",
-            max_points=w.get("resources", 15),
+            max_points=w["resources"],
             description="VRAM/RAM cleanup, process lifecycle management, and token efficiency.",
             evaluation_criteria=[
                 "Model memory and cache purging between intensive stages",
@@ -236,7 +265,7 @@ def create_default_rubric(
         RubricCategory(
             id="verification",
             name="5. Empirical Verification Rigor",
-            max_points=w.get("verification", 20),
+            max_points=w["verification"],
             description="Falsifiable tests, dual-gate acceptance, and objective metrics.",
             evaluation_criteria=[
                 "Automated unit & integration test coverage (target >= 90%)",
@@ -256,6 +285,11 @@ def evaluate_audit(
     deductions: Optional[Dict[str, List[str]]] = None,
 ) -> AuditResult:
     """Evaluate audit scores against the rubric and compute letter grades and verdicts."""
+    if rubric.total_points <= 0:
+        raise ValueError(
+            f"Rubric total_points must be strictly positive (got {rubric.total_points})"
+        )
+
     deductions_map = deductions or {}
     cat_map = {c.id: c for c in rubric.categories}
 
@@ -264,6 +298,10 @@ def evaluate_audit(
 
     for cat in rubric.categories:
         score_val = score_inputs.get(cat.id, float(cat.max_points))
+        if not isinstance(score_val, (int, float)) or not math.isfinite(score_val):
+            raise ValueError(
+                f"Score for {cat.id} must be a finite real number (got {score_val})"
+            )
         if score_val < 0.0:
             raise ValueError(f"Score for {cat.id} cannot be negative (got {score_val})")
         if score_val > cat.max_points:

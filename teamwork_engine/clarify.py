@@ -119,8 +119,8 @@ class ClarifiedTask:
                 defects.append(f"Potentially omitted negative constraint: '{neg}'")
 
         # 2. File / Directory paths check
-        path_pattern = r"(?:[A-Za-z]:[\\/][\w\s.\\/-]+|/[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)+)"
-        raw_paths = set(re.findall(path_pattern, raw_task))
+        path_pattern = r"(?:[A-Za-z]:[\\/](?:[\w.-]+(?:\s+[\w.-]+)*[\\/])*(?:[\w.-]+)?|/(?:[a-zA-Z0-9_.-]+)(?:/[a-zA-Z0-9_.-]+)+)"
+        raw_paths = {p.strip().rstrip(".,;:'\"`") for p in re.findall(path_pattern, raw_task) if p.strip().rstrip(".,;:'\"`")}
         all_text = (
             self.goal
             + " "
@@ -211,14 +211,17 @@ def clarify_task(raw_task: str, context: Optional[str] = None) -> ClarifiedTask:
     # Extract Constraints and Protected Invariants
     constraints: List[str] = []
     constraint_patterns = [
-        r"(?:^|\n)[ \t]*[-*]\s*(?:never|do not|don't|zero|must not|prohibited|no)\s+([^\n]+)",
-        r"(?:never|do not|don't|must not)\s+([^\n.,;]+)",
-        r"(?:preserve|protect|retain)\s+([^\n.,;]+)",
+        # Bulleted negative constraints and invariants (captures negation keyword)
+        r"(?:^|\n)[ \t]*[-*]\s*((?:never|do\s+not|don't|zero|must\s+not|prohibited(?:\s+(?:from|to))?|no|preserve|protect|retain)\s+[^\n]+)",
+        # Inline negative constraints in prose (captures negation keyword)
+        r"\b((?:never|do\s+not|don't|must\s+not|prohibited(?:\s+(?:from|to))?|zero)\s+[^.,;\n]+)",
+        # Inline invariants or preservation clauses in prose
+        r"\b((?:preserve|protect|retain)\s+[^.,;\n]+)",
     ]
     for pat in constraint_patterns:
         for match in re.findall(pat, full_text, re.IGNORECASE):
-            text_val = match.strip()
-            if text_val and text_val not in constraints:
+            text_val = match.strip().rstrip(".,;")
+            if text_val and not any(text_val.lower() == c.lower() for c in constraints):
                 constraints.append(text_val)
 
     # Hard-coded check for common fleet invariants
@@ -236,7 +239,11 @@ def clarify_task(raw_task: str, context: Optional[str] = None) -> ClarifiedTask:
         required_work.extend([s.strip() for s in numbered_steps])
     else:
         bullet_steps = re.findall(r"^\s*[-*]\s+(.+)$", cleaned_raw, re.MULTILINE)
-        action_bullets = [b.strip() for b in bullet_steps if not re.match(r"^(?:never|do not|don't|must not|zero)\b", b, re.IGNORECASE)]
+        action_bullets = [
+            b.strip()
+            for b in bullet_steps
+            if not re.match(r"^(?:never|do\s+not|don't|must\s+not|zero|prohibited|no|preserve|protect|retain)\b", b, re.IGNORECASE)
+        ]
         if action_bullets:
             required_work.extend(action_bullets)
         else:

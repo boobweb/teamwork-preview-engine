@@ -127,17 +127,31 @@ def check_guardrail(
     process_violations: List[str] = []
 
     # 1. Check for protected process termination
+    # Forward command termination: Stop-Process, taskkill, kill, pkill, killall
     termination_regex = re.compile(
-        r"(?:Stop-Process|kill|taskkill|pkill)\b[^\n\r]*?\b("
+        r"(?:Stop-Process|kill|taskkill|pkill|killall)\b(?:\s+-(?:[a-zA-Z0-9]+|Name|ProcessName|Force|Confirm:false|\d+)|/[a-zA-Z0-9]+|[\s\"'])*?\b("
         + "|".join(PROTECTED_PROCESSES)
         + r")(?:\.exe)?\b",
         re.IGNORECASE,
     )
     for match in termination_regex.finditer(text):
         proc = match.group(1)
-        process_violations.append(
-            f"Attempted termination of protected process: '{proc}'. Violates fleet coexistence safety invariant."
-        )
+        violation_str = f"Attempted termination of protected process: '{proc}'. Violates fleet coexistence safety invariant."
+        if violation_str not in process_violations:
+            process_violations.append(violation_str)
+
+    # Pipeline process termination: Get-Process <proc> | Stop-Process
+    pipeline_regex = re.compile(
+        r"(?:Get-Process|gps)\s+(?:-Name\s+)?['\"]?("
+        + "|".join(PROTECTED_PROCESSES)
+        + r")['\"]?\b[^\n\r|]*?\|\s*(?:Stop-Process|spps|kill)\b",
+        re.IGNORECASE,
+    )
+    for match in pipeline_regex.finditer(text):
+        proc = match.group(1)
+        violation_str = f"Attempted termination of protected process: '{proc}'. Violates fleet coexistence safety invariant."
+        if violation_str not in process_violations:
+            process_violations.append(violation_str)
 
     # 2. Check for administrative antipatterns
     for pat, desc in ANTIPATTERN_PATTERNS:

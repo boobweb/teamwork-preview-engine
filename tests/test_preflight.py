@@ -87,6 +87,29 @@ class TestPreflight(unittest.TestCase):
     def test_parse_retry_timestamp_invalid(self):
         self.assertIsNone(parse_retry_timestamp("No time here"))
 
+    def test_parse_retry_timestamp_month_end_rollover(self):
+        """Simulate month-end dates (Jan 31, Dec 31) when advancing day past midnight."""
+        from unittest.mock import patch
+        # Test Jan 31 -> Feb 1
+        with patch("teamwork_engine.preflight.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 1, 31, 23, 30)
+            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            res = parse_retry_timestamp("try again at 01:00 AM")
+            self.assertIsNotNone(res)
+            self.assertEqual(res.year, 2026)
+            self.assertEqual(res.month, 2)
+            self.assertEqual(res.day, 1)
+
+        # Test Dec 31 -> Jan 1 (year rollover)
+        with patch("teamwork_engine.preflight.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 12, 31, 23, 30)
+            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            res = parse_retry_timestamp("try again at 01:00 AM")
+            self.assertIsNotNone(res)
+            self.assertEqual(res.year, 2027)
+            self.assertEqual(res.month, 1)
+            self.assertEqual(res.day, 1)
+
     def test_fallback_recommendations(self):
         reports = [
             QuotaReport(provider="claude", status=AgentStatus.BLOCKED_QUOTA),
