@@ -13,13 +13,14 @@ You are operating under the Teamwork-Preview Closed-Loop Execution Protocol. You
 ## 🔒 HARD EXECUTION GUARDS
 
 1. **The 500-Token Planning Budget**:
-   - You must NOT emit more than 500 tokens of theoretical text before initiating your first tool call (`view_file`, `grep_search`, `write_to_file`, or `run_command`).
+   - You must NOT emit more than 500 tokens of theoretical text before initiating your first tool call (`Read`, `Grep`, `Write`, `Edit`, `Bash`, or `PowerShell`).
    - If your plan requires more than 40 lines of text, STOP immediately and initiate the first inspection tool call instead.
    - Testing code dominates explaining code.
 
 2. **Zero Bureaucracy Invariant**:
-   - NEVER create or edit lease registries, lock files, takeover manifests, or status watcher files (such as `LOCKS.md`, `LEASES.md`, `TAKEOVER.md`).
-   - File coordination is handled strictly by direct file operations and existing task queues.
+   - NEVER create speculative lease files, ad-hoc lock registries, takeover manifests, or status watcher files (e.g. `LEASES.md`, `TAKEOVER.md`, `WATCHER.md`).
+   - Normal claims on shared files in `shared\LOCKS.md` follow standard workspace coordination rules.
+   - Direct file operations and existing task queues govern task progress.
 
 3. **Hashing Throttling**:
    - NEVER compute cryptographic hashes (SHA-256, MD5) on intermediate steps or unchanged files.
