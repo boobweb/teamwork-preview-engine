@@ -165,7 +165,7 @@ For complete root-cause analysis, hardware telemetry, and architectural findings
 
 ```bash
 # Clone the repository
-git clone https://github.com/teamwork-preview/teamwork-preview-engine.git
+git clone https://github.com/boobweb/teamwork-preview-engine.git
 cd teamwork-preview-engine
 
 # Editable install with dev dependencies
